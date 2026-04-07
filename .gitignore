@@ -1,0 +1,34 @@
+# General
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
+
+# Backend (Python)
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+.venv/
+env/
+*.xlsx
+*.xls
+backend/uploads/
+*.pkl
+.python-version
+
+# Frontend (Node/React)
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.env*
+npm-debug.log*
+yarn-debug.log*
+.eslintcache
+
+# Project Specific
+upload_response.json
+dashboard_response.json
