@@ -66,7 +66,7 @@ class DataProcessor:
                 self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
         # Handle dates
-        for col in ['etd', 'eta', 'declaration_date']:
+        for col in ['etd', 'eta', 'declaration_date', 'ngày_đăng_ký', 'ngày_tờ_khai']:
             if col in self.df.columns:
                 # Excel serial dates
                 try:
@@ -131,15 +131,18 @@ class DataProcessor:
         if df_filtered.empty:
             return charts
             
-        if 'eta' in df_filtered.columns and 'value' in df_filtered.columns:
+        # Use ngày_đăng_ký as primary date for charts, fallback to eta
+        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in df_filtered.columns else 'eta'
+        
+        if date_col in df_filtered.columns and 'value' in df_filtered.columns:
             try:
-                # Ensure eta is datetime for the chart
+                # Ensure date_col is datetime
                 temp_df = df_filtered.copy()
-                temp_df['eta'] = pd.to_datetime(temp_df['eta'], errors='coerce')
-                temp_df = temp_df.dropna(subset=['eta'])
+                temp_df[date_col] = pd.to_datetime(temp_df[date_col], errors='coerce')
+                temp_df = temp_df.dropna(subset=[date_col])
                 
                 if not temp_df.empty:
-                    temp_df['month'] = temp_df['eta'].dt.strftime('%Y-%m')
+                    temp_df['month'] = temp_df[date_col].dt.strftime('%Y-%m')
                     trend = temp_df.groupby('month')['value'].sum().reset_index()
                     # Convert to standard types for JSON
                     charts["monthlyTrend"] = [
@@ -150,7 +153,7 @@ class DataProcessor:
                         for _, row in trend.iterrows()
                     ]
             except Exception as e:
-                print(f"Error processing monthly trend: {e}")
+                print(f"Error processing monthly trend using {date_col}: {e}")
 
         if 'shipper' in df_filtered.columns:
             try:
@@ -207,9 +210,10 @@ class DataProcessor:
                 vals = self.df[self.df[col] != "Unknown"][col].unique()
                 options[col] = sorted(list(set([str(v).strip() for v in vals if v])))
         
-        # Extract years from eta
-        if 'eta' in self.df.columns:
-            years = self.df['eta'].dt.year.dropna().unique().astype(int).tolist()
+        # Extract years from ngày_đăng_ký or eta
+        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in self.df.columns else 'eta'
+        if date_col in self.df.columns:
+            years = self.df[date_col].dt.year.dropna().unique().astype(int).tolist()
             options['years'] = sorted([str(y) for y in years], reverse=True)
         
         return options
@@ -228,16 +232,19 @@ class DataProcessor:
         if 'origins' in filters and filters['origins']:
             df_filtered = df_filtered[df_filtered['origins'].isin(filters['origins'])]
 
+        # Primary date filter column
+        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in df_filtered.columns else 'eta'
+
         if 'date_range' in filters and filters['date_range']:
             start_date, end_date = filters['date_range']
             if start_date:
-                df_filtered = df_filtered[df_filtered['eta'] >= pd.to_datetime(start_date)]
+                df_filtered = df_filtered[df_filtered[date_col] >= pd.to_datetime(start_date)]
             if end_date:
-                df_filtered = df_filtered[df_filtered['eta'] <= pd.to_datetime(end_date)]
+                df_filtered = df_filtered[df_filtered[date_col] <= pd.to_datetime(end_date)]
 
         if 'years' in filters and filters['years']:
             # Assuming years is a list of strings like ["2023"]
             years_int = [int(y) for y in filters['years']]
-            df_filtered = df_filtered[df_filtered['eta'].dt.year.isin(years_int)]
+            df_filtered = df_filtered[df_filtered[date_col].dt.year.isin(years_int)]
 
         return df_filtered
