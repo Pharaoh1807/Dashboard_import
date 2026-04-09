@@ -1,11 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from typing import List, Optional, Dict, Any
 import uuid
 import pandas as pd
 import numpy as np
+import os
+import io
+import motor.motor_asyncio
+from dotenv import load_dotenv
 from processor import DataProcessor
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -18,27 +24,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import os
-# Temporary in-memory storage + disk persistence
-data_store: Dict[str, DataProcessor] = {}
-UPLOAD_DIR = "/Users/nguyenthanhhao/Desktop/Projects/Dashboard_Import/backend/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# MongoDB Configuration
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
+db = client.import_dashboard
 
-def get_processor(file_id: str) -> Optional[DataProcessor]:
-    # Check memory first
-    if file_id in data_store:
-        return data_store[file_id]
+# In-memory cache for performance (optional on free tier, help speed up subsequent requests)
+data_cache: Dict[str, DataProcessor] = {}
+
+async def get_processor(file_id: str) -> Optional[DataProcessor]:
+    # Check cache first
+    if file_id in data_cache:
+        return data_cache[file_id]
     
-    # Check disk
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.pkl")
-    if os.path.exists(file_path):
-        print(f"Loading {file_id} from disk...")
-        df = pd.read_pickle(file_path)
+    # Fetch from MongoDB
+    try:
+        # Check if file exists in our metadata
+        file_meta = await db.files.find_one({"_id": file_id})
+        if not file_meta:
+            return None
+            
+        # Fetch all records for this file
+        cursor = db.records.find({"file_id": file_id})
+        records = await cursor.to_list(length=1000000) # Support up to 1M rows
+        
+        if not records:
+            return None
+            
+        df = pd.DataFrame(records)
+        # Remove MongoDB specific _id and our file_id link from the internal DF used for calculations
+        if '_id' in df.columns: del df['_id']
+        if 'file_id' in df.columns: del df['file_id']
+        
         processor = DataProcessor(df)
-        data_store[file_id] = processor
+        data_cache[file_id] = processor
         return processor
-    
-    return None
+    except Exception as e:
+        print(f"Error loading from MongoDB: {e}")
+        return None
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -51,13 +74,32 @@ async def upload_file(file: UploadFile = File(...)):
         df = processor.load_excel(content)
         
         file_id = str(uuid.uuid4())
-        data_store[file_id] = processor
         
-        # Save to disk for persistence
-        file_path = os.path.join(UPLOAD_DIR, f"{file_id}.pkl")
-        df.to_pickle(file_path)
+        # 1. Save metadata
+        await db.files.insert_one({
+            "_id": file_id,
+            "filename": file.filename,
+            "rowCount": len(df),
+            "uploadedAt": pd.Timestamp.now()
+        })
         
-        # Replace NaN with None for JSON compliance
+        # 2. Save records to MongoDB
+        # Convert df to records and add file_id reference
+        records = df.to_dict('records')
+        for r in records:
+            r['file_id'] = file_id
+            # Clean up NaN for MongoDB (it doesn't like them)
+            for k, v in r.items():
+                if pd.isna(v): r[k] = None
+        
+        # Batch insert for efficiency
+        if records:
+            await db.records.insert_many(records)
+        
+        # Cache the processor
+        data_cache[file_id] = processor
+        
+        # Replace NaN with None for JSON response
         preview_data = df.head(5).replace({pd.NA: None, np.nan: None}).to_dict('records')
         
         return jsonable_encoder({
@@ -67,17 +109,37 @@ async def upload_file(file: UploadFile = File(...)):
             "preview": preview_data
         })
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 @app.get("/api/dashboard/{file_id}")
-async def get_dashboard(file_id: str, shipper: Optional[List[str]] = None, origins: Optional[List[str]] = None):
-    processor = get_processor(file_id)
+async def get_dashboard(
+    file_id: str, 
+    shipper: Optional[List[str]] = Query(None, alias="shipper[]"),
+    origins: Optional[List[str]] = Query(None, alias="origins[]"),
+    shipper_raw: Optional[List[str]] = Query(None, alias="shipper"),
+    origins_raw: Optional[List[str]] = Query(None, alias="origins"),
+    date_range: Optional[List[str]] = Query(None, alias="dateRange[]"),
+    date_range_raw: Optional[List[str]] = Query(None, alias="dateRange"),
+    years: Optional[List[str]] = Query(None, alias="years[]"),
+    years_raw: Optional[List[str]] = Query(None, alias="years")
+):
+    processor = await get_processor(file_id)
     if not processor:
-        raise HTTPException(status_code=404, detail="File session not found.")
+        raise HTTPException(status_code=404, detail="File session-data not found in Database.")
+    
+    # Merge parameters
+    final_shipper = (shipper or []) + (shipper_raw or [])
+    final_origins = (origins or []) + (origins_raw or [])
+    final_date_range = (date_range or []) + (date_range_raw or [])
+    final_years = (years or []) + (years_raw or [])
     
     filters = {
-        "shipper": shipper,
-        "origins": origins
+        "shipper": final_shipper if final_shipper else None,
+        "origins": final_origins if final_origins else None,
+        "date_range": final_date_range if len(final_date_range) == 2 else None,
+        "years": final_years if final_years else None
     }
     
     try:
@@ -91,26 +153,37 @@ async def get_dashboard(file_id: str, shipper: Optional[List[str]] = None, origi
             "table": table
         })
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        with open("/tmp/backend_debug.log", "a") as f:
-            f.write(f"\n--- Error at {pd.Timestamp.now()} ---\n")
-            f.write(error_trace)
-        print(error_trace)
         raise HTTPException(status_code=500, detail=f"Data processing error: {str(e)}")
 
 @app.get("/api/export/{file_id}")
-async def export_data(file_id: str, shipper: Optional[List[str]] = None, origins: Optional[List[str]] = None):
-    processor = get_processor(file_id)
+async def export_data(
+    file_id: str, 
+    shipper: Optional[List[str]] = Query(None, alias="shipper[]"),
+    origins: Optional[List[str]] = Query(None, alias="origins[]"),
+    shipper_raw: Optional[List[str]] = Query(None, alias="shipper"),
+    origins_raw: Optional[List[str]] = Query(None, alias="origins"),
+    date_range: Optional[List[str]] = Query(None, alias="dateRange[]"),
+    date_range_raw: Optional[List[str]] = Query(None, alias="dateRange"),
+    years: Optional[List[str]] = Query(None, alias="years[]"),
+    years_raw: Optional[List[str]] = Query(None, alias="years")
+):
+    processor = await get_processor(file_id)
     if not processor:
         raise HTTPException(status_code=404, detail="File session not found.")
+        
+    final_shipper = (shipper or []) + (shipper_raw or [])
+    final_origins = (origins or []) + (origins_raw or [])
+    final_date_range = (date_range or []) + (date_range_raw or [])
+    final_years = (years or []) + (years_raw or [])
+    
     filters = {
-        "shipper": shipper,
-        "origins": origins
+        "shipper": final_shipper if final_shipper else None,
+        "origins": final_origins if final_origins else None,
+        "date_range": final_date_range if len(final_date_range) == 2 else None,
+        "years": final_years if final_years else None
     }
     
     from fastapi.responses import StreamingResponse
-    import io
 
     df_filtered = processor._apply_filters(filters)
     
@@ -118,31 +191,24 @@ async def export_data(file_id: str, shipper: Optional[List[str]] = None, origins
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_filtered.to_excel(writer, index=False, sheet_name='Filtered Data')
         
-        # Also add summary sheet
         kpis = processor.get_kpis(filters)
         summary_df = pd.DataFrame([kpis])
         summary_df.to_excel(writer, index=False, sheet_name='Summary')
 
     output.seek(0)
     
-    headers = {
-        'Content-Disposition': f'attachment; filename="import_export_{file_id[:8]}.xlsx"'
-    }
-    
-    return StreamingResponse(
-        output, 
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers=headers
-    )
+    headers = { 'Content-Disposition': f'attachment; filename="import_export_{file_id[:8]}.xlsx"' }
+    return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 @app.get("/api/filters/{file_id}")
 async def get_filters(file_id: str):
-    processor = get_processor(file_id)
+    processor = await get_processor(file_id)
     if not processor:
         raise HTTPException(status_code=404, detail="File session not found.")
-    
     return processor.get_filter_options()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use environment-defined port for Render.com
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

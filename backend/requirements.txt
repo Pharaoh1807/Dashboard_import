@@ -4,3 +4,6 @@ pandas
 openpyxl
 python-multipart
 numpy
+motor
+pymongo
+python-dotenv

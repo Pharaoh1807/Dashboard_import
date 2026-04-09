@@ -6,6 +6,8 @@ import io
 class DataProcessor:
     def __init__(self, df: pd.DataFrame = None):
         self.df = df
+        if self.df is not None:
+            self._preprocess()
 
     def load_excel(self, file_content: bytes) -> pd.DataFrame:
         excel_file = pd.ExcelFile(io.BytesIO(file_content))
@@ -64,7 +66,7 @@ class DataProcessor:
                 self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
         # Handle dates
-        for col in ['etd', 'eta']:
+        for col in ['etd', 'eta', 'declaration_date']:
             if col in self.df.columns:
                 # Excel serial dates
                 try:
@@ -78,7 +80,7 @@ class DataProcessor:
         # Handle object columns safely
         for col in self.df.columns:
             if self.df[col].dtype == object:
-                self.df[col] = self.df[col].fillna("Unknown")
+                self.df[col] = self.df[col].fillna("Unknown").astype(str).str.strip()
             elif self.df[col].dtype.name.startswith('datetime'):
                 self.df[col] = self.df[col].fillna(pd.NaT)
         
@@ -150,18 +152,26 @@ class DataProcessor:
             except Exception as e:
                 print(f"Error processing monthly trend: {e}")
 
-        if 'shipper' in df_filtered.columns and 'value' in df_filtered.columns:
+        if 'shipper' in df_filtered.columns:
             try:
-                top_shippers = df_filtered.groupby('shipper')['value'].sum().sort_values(ascending=False).head(5).reset_index()
+                # 1. Top Shippers by Value
+                val_agg = df_filtered.groupby('shipper')['value'].sum().sort_values(ascending=False).head(10).reset_index()
                 charts["topShippers"] = [
-                    {
-                        "shipper": str(row['shipper']), 
-                        "value": float(row['value']) if pd.notnull(row['value']) else 0.0
-                    }
-                    for _, row in top_shippers.iterrows()
+                    {"shipper": str(row['shipper']), "value": float(row['value'])}
+                    for _, row in val_agg.iterrows()
                 ]
+                
+                # 2. Top Shippers by Shipment Count (Unique Bill Numbers)
+                if 'bill_number' in df_filtered.columns:
+                    valid_df = df_filtered[(df_filtered['bill_number'] != "Unknown") & (df_filtered['bill_number'].astype(str).str.strip() != "")]
+                    ship_agg = valid_df.groupby('shipper')['bill_number'].nunique().sort_values(ascending=False).head(10).reset_index()
+                    ship_agg.columns = ['shipper', 'count']
+                    charts["shippersByShipments"] = [
+                        {"shipper": str(row['shipper']), "count": int(row['count'])}
+                        for _, row in ship_agg.iterrows()
+                    ]
             except Exception as e:
-                print(f"Error processing top shippers: {e}")
+                print(f"Error processing shipper stats: {e}")
             
         if 'origins' in df_filtered.columns and 'value' in df_filtered.columns:
             try:
@@ -193,9 +203,14 @@ class DataProcessor:
         cols_to_filter = ['shipper', 'origins', 'pod', 'incoterm', 'payment']
         for col in cols_to_filter:
             if col in self.df.columns:
-                # Filter out "Unknown"
-                vals = self.df[self.df[col] != "Unknown"][col].unique().tolist()
-                options[col] = sorted([str(v) for v in vals])
+                # Filter out "Unknown", strip, and ensure unique
+                vals = self.df[self.df[col] != "Unknown"][col].unique()
+                options[col] = sorted(list(set([str(v).strip() for v in vals if v])))
+        
+        # Extract years from eta
+        if 'eta' in self.df.columns:
+            years = self.df['eta'].dt.year.dropna().unique().astype(int).tolist()
+            options['years'] = sorted([str(y) for y in years], reverse=True)
         
         return options
 
@@ -219,5 +234,10 @@ class DataProcessor:
                 df_filtered = df_filtered[df_filtered['eta'] >= pd.to_datetime(start_date)]
             if end_date:
                 df_filtered = df_filtered[df_filtered['eta'] <= pd.to_datetime(end_date)]
+
+        if 'years' in filters and filters['years']:
+            # Assuming years is a list of strings like ["2023"]
+            years_int = [int(y) for y in filters['years']]
+            df_filtered = df_filtered[df_filtered['eta'].dt.year.isin(years_int)]
 
         return df_filtered

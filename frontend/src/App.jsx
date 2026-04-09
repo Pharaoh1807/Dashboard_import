@@ -32,8 +32,10 @@ import {
   Legend
 } from 'recharts';
 
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const Card = ({ title, value, subtext, icon: Icon, trend }) => (
-  <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+  <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow min-w-0">
     <div className="flex items-center justify-between mb-4">
       <div className="p-2 bg-primary-50 rounded-lg">
         <Icon className="w-6 h-6 text-primary-600" />
@@ -44,10 +46,10 @@ const Card = ({ title, value, subtext, icon: Icon, trend }) => (
         </span>
       )}
     </div>
-    <h3 className="text-gray-500 text-sm font-medium">{title}</h3>
-    <div className="mt-1 flex items-baseline gap-2">
-      <span className="text-2xl font-bold text-gray-900">{value ?? '0'}</span>
-      {subtext && <span className="text-xs text-gray-400">{subtext}</span>}
+    <h3 className="text-gray-500 text-sm font-medium truncate">{title}</h3>
+    <div className="mt-1 flex items-baseline gap-2 flex-wrap min-w-0">
+      <span className="text-xl sm:text-2xl font-bold text-gray-900 break-all">{value ?? '0'}</span>
+      {subtext && <span className="text-xs text-gray-400 font-medium">{subtext}</span>}
     </div>
   </div>
 );
@@ -80,19 +82,21 @@ function App() {
   const [data, setData] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  
+
   const [filters, setFilters] = useState({
     shipper: [],
     origins: [],
+    years: [],
     dateRange: [null, null]
   });
-  
+
   const [tableColumnFilters, setTableColumnFilters] = useState({});
 
   const [filterOptions, setFilterOptions] = useState({
     shipper: [],
     origins: [],
-    pod: []
+    pod: [],
+    years: []
   });
 
   const handleUpload = async (e) => {
@@ -106,7 +110,7 @@ function App() {
     setData(null);
     setFilters({ shipper: [], origins: [], dateRange: [null, null] });
     setTableColumnFilters({});
-    
+
     try {
       const response = await axios.post('/api/upload', formData);
       const newFileId = response.data.fileId;
@@ -124,7 +128,12 @@ function App() {
 
   const fetchDashboardData = async (id) => {
     try {
-      const response = await axios.get(`/api/dashboard/${id}`, { params: filters });
+      const response = await axios.get(`/api/dashboard/${id}`, { 
+        params: filters,
+        paramsSerializer: {
+          indexes: null // prevents origins[] and sends origins=
+        }
+      });
       setData(response.data);
     } catch (error) {
       console.error("Failed to fetch dashboard data", error);
@@ -137,7 +146,8 @@ function App() {
       setFilterOptions({
         shipper: response.data?.shipper || [],
         origins: response.data?.origins || [],
-        pod: response.data?.pod || []
+        pod: response.data?.pod || [],
+        years: response.data?.years || []
       });
     } catch (error) {
       console.error("Failed to fetch filter options", error);
@@ -223,7 +233,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
       {/* Dynamic Collapsible Sidebar */}
-      <aside 
+      <aside
         onMouseEnter={() => setIsSidebarHovered(true)}
         onMouseLeave={() => setIsSidebarHovered(false)}
         className={`bg-slate-900 text-white flex flex-col fixed inset-y-0 shadow-2xl transition-all duration-500 ease-in-out z-50 ${isExpanded ? 'w-64' : 'w-20'}`}
@@ -239,7 +249,7 @@ function App() {
           </div>
 
           <nav className="space-y-3 flex-1 overflow-hidden">
-            <button 
+            <button
               onClick={() => setActiveTab('dashboard')}
               className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-[0_10px_20px_-5px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
@@ -248,7 +258,7 @@ function App() {
                 Overview
               </span>
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('raw-data')}
               className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl font-semibold transition-all ${activeTab === 'raw-data' ? 'bg-primary-600 text-white shadow-[0_10px_20px_-5px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
@@ -289,11 +299,21 @@ function App() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => {
-                const url = `/api/export/${fileId}?${new URLSearchParams(filters).toString()}`;
+                const searchParams = new URLSearchParams();
+                Object.entries(filters).forEach(([key, value]) => {
+                  if (Array.isArray(value)) {
+                    value.forEach(v => {
+                      if (v !== null) searchParams.append(key, v);
+                    });
+                  } else if (value !== null) {
+                    searchParams.append(key, value);
+                  }
+                });
+                const url = `/api/export/${fileId}?${searchParams.toString()}`;
                 window.open(url, '_blank');
               }}
               className="flex items-center gap-2 bg-white border border-slate-200 px-6 py-3 rounded-2xl text-sm font-bold text-slate-700 hover:border-primary-500 hover:text-primary-600 transition-all shadow-sm active:scale-95"
@@ -301,7 +321,7 @@ function App() {
               <Download className="w-4 h-4" />
               Export
             </button>
-            <button 
+            <button
               onClick={() => setFileId(null)}
               className="flex items-center gap-2 bg-[#1e293b] px-6 py-3 rounded-2xl text-sm font-bold text-white hover:bg-[#334155] transition-all shadow-xl active:scale-95"
             >
@@ -316,10 +336,10 @@ function App() {
             {/* KPI Section */}
             {data && data.kpis && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-                <Card title="Traffic Volume" value={data.kpis.totalShipments.toLocaleString()} icon={TrendingUp} trend={8.2} />
-                <Card title="Market Value" value={`$${data.kpis.totalValue.toLocaleString()}`} icon={FileSpreadsheet} subtext="USD" />
+                <Card title="Total Shipments" value={data.kpis.totalShipments.toLocaleString()} icon={TrendingUp} trend={8.2} />
+                <Card title="Total Value" value={`$${Math.round(data.kpis.totalValue).toLocaleString()}`} icon={FileSpreadsheet} subtext="USD" />
                 <Card title="Supplier Count" value={data.kpis.totalShippers} icon={Users} />
-                <Card title="Cargo Weight" value={data.kpis.totalWeight.toLocaleString()} icon={Package} subtext="kg" />
+                <Card title="Cargo Weight" value={Math.round(data.kpis.totalWeight).toLocaleString()} icon={Package} subtext="kg" />
               </div>
             )}
 
@@ -336,7 +356,7 @@ function App() {
                       <Tooltip
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
                         cursor={{ fill: '#f8fafc' }}
-                        formatter={(value) => [`$${value.toLocaleString()}`, 'Total Value']}
+                        formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Total Value']}
                       />
                       <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} barSize={45} />
                     </BarChart>
@@ -366,11 +386,117 @@ function App() {
                       </Pie>
                       <Tooltip
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value) => [`$${value.toLocaleString()}`, 'Value Share']}
+                        formatter={(value) => [`$${Math.round(value).toLocaleString()}`, 'Value Share']}
                       />
                       <Legend verticalAlign="bottom" align="center" iconType="circle" />
                     </PieChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Shippers Analysis Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 mb-12">
+              {/* Table 1: By Value */}
+              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary-50 rounded-lg">
+                      <TrendingUp className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">Top Shippers by Value</h3>
+                  </div>
+                  <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full uppercase">USD Focused</span>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-50">
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 w-12 text-center">#</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400">Shipper</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 text-right pr-4">Total Value</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 w-32">Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(data?.charts?.topShippers || []).map((sh, idx) => {
+                        const maxVal = data?.charts?.topShippers?.[0]?.value || 1;
+                        const percentage = (sh.value / (data?.kpis?.totalValue || 1)) * 100;
+                        const widthPerc = (sh.value / maxVal) * 100;
+                        
+                        return (
+                          <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 text-center">
+                              <span className="text-[10px] font-bold text-slate-400">{idx + 1}</span>
+                            </td>
+                            <td className="py-4 font-bold text-slate-700 text-xs truncate max-w-[150px]" title={sh.shipper}>{sh.shipper}</td>
+                            <td className="py-4 text-right font-black text-slate-900 text-xs pr-4">${Math.round(sh.value).toLocaleString()}</td>
+                            <td className="py-4">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-primary-500" style={{ width: `${widthPerc}%` }}></div>
+                                </div>
+                                <span className="text-[8px] font-bold text-slate-400">{percentage.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Table 2: By Shipment Count */}
+              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-50 rounded-lg">
+                      <Package className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">Shipment Volume</h3>
+                  </div>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Frequency Focused</span>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-50">
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 w-12 text-center">#</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400">Shipper</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 text-right pr-4">Shipments</th>
+                        <th className="pb-4 text-[10px] font-black uppercase text-slate-400 w-32">Intensity</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(data?.charts?.shippersByShipments || []).map((sh, idx) => {
+                        const maxCount = data?.charts?.shippersByShipments?.[0]?.count || 1;
+                        const totalShipments = data?.kpis?.totalShipments || 1;
+                        const percentage = (sh.count / totalShipments) * 100;
+                        const widthPerc = (sh.count / maxCount) * 100;
+                        
+                        return (
+                          <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 text-center">
+                              <span className="text-[10px] font-bold text-slate-400">{idx + 1}</span>
+                            </td>
+                            <td className="py-4 font-bold text-slate-700 text-xs truncate max-w-[150px]" title={sh.shipper}>{sh.shipper}</td>
+                            <td className="py-4 text-right font-black text-slate-900 text-xs pr-4">{sh.count.toLocaleString()}</td>
+                            <td className="py-4">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-indigo-500" style={{ width: `${widthPerc}%` }}></div>
+                                </div>
+                                <span className="text-[8px] font-bold text-slate-400">{percentage.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -402,6 +528,18 @@ function App() {
                   ))}
                 </select>
               </div>
+              <div className="flex-1 min-w-[200px]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Fiscal Year</span>
+                <select
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none"
+                  onChange={(e) => setFilters(prev => ({ ...prev, years: e.target.value ? [e.target.value] : [] }))}
+                >
+                  <option value="">Full History (All Years)</option>
+                  {(filterOptions.years || []).map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </>
         ) : (
@@ -417,7 +555,7 @@ function App() {
                 <span className="text-sm font-bold text-slate-700">{filteredTableData.length} records in current view</span>
               </div>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse table-fixed min-w-[1400px]">
                 <thead>
@@ -425,12 +563,12 @@ function App() {
                     {displayColumns.map(col => (
                       <th key={col.key} className="px-8 py-6">
                         <span className="text-[10px] font-black uppercase text-slate-400 mb-2 block">{col.label}</span>
-                        <input 
-                          type="text" 
-                          placeholder={`Filter ${col.label}...`} 
-                          className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-[10px] focus:ring-2 focus:ring-primary-500 outline-none font-medium"
+                        <input
+                          type="text"
+                          placeholder={`Filter ${col.label}...`}
+                          className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-[10px] text-slate-900 focus:ring-2 focus:ring-primary-500 outline-none font-medium"
                           value={tableColumnFilters[col.key] || ''}
-                          onChange={(e) => setTableColumnFilters(f => ({...f, [col.key]: e.target.value}))}
+                          onChange={(e) => setTableColumnFilters(f => ({ ...f, [col.key]: e.target.value }))}
                         />
                       </th>
                     ))}
