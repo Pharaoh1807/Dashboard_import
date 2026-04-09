@@ -33,10 +33,7 @@ class DataProcessor:
             target_sheet = excel_file.sheet_names[0]
             header_row = 0
             
-        print(f"Selected sheet '{target_sheet}' at row {header_row} with {max_cols} columns")
-        
-        print(f"Header found on sheet '{target_sheet}' at row {header_row}")
-        
+           
         # Re-read with the correct sheet and header
         self.df = pd.read_excel(excel_file, sheet_name=target_sheet, header=header_row)
         self._preprocess()
@@ -83,14 +80,10 @@ class DataProcessor:
                 self.df[col] = self.df[col].fillna("Unknown").astype(str).str.strip()
             elif self.df[col].dtype.name.startswith('datetime'):
                 self.df[col] = self.df[col].fillna(pd.NaT)
-        
-        print(f"Processed columns: {self.df.columns.tolist()}")
-        print(f"Column types: {self.df.dtypes.to_dict()}")
-        print(f"Data preview:\n{self.df.head(3)}")
+       
 
     def get_total_shipments(self, filters: Dict[str, Any] = None) -> int:
         df_filtered = self._apply_filters(filters)
-        print(f"Available columns for shipments: {df_filtered.columns.tolist()}")
         # The column was normalized to lowercase 'bill_number' in _preprocess
         if 'bill_number' in df_filtered.columns:
             # Filter out "Unknown" or empty strings
@@ -99,9 +92,7 @@ class DataProcessor:
                 (df_filtered['bill_number'].astype(str).str.strip() != "")
             ]['bill_number']
             count = int(valid_bills.nunique())
-            print(f"Unique bill numbers found: {valid_bills}")
             return count
-        print("Column 'bill_number' not found in DataFrame!")
         return 0
 
     def get_kpis(self, filters: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -110,13 +101,21 @@ class DataProcessor:
         total_value = df_filtered['value'].sum() if 'value' in df_filtered.columns else 0
         total_shipments = self.get_total_shipments(filters)
         total_shippers = df_filtered['shipper'].nunique() if 'shipper' in df_filtered.columns else 0
-        total_weight = df_filtered['gross_weight'].sum() if 'gross_weight' in df_filtered.columns else 0
+        
+        # Calculate Total Containers (avoiding duplicates per bill_number)
+        total_containers = 0
+        if 'the_number_of_cont_cbm' in df_filtered.columns and 'bill_number' in df_filtered.columns:
+            # Use max per bill to handle potential variation if some rows are missing data
+            bill_containers = df_filtered.groupby('bill_number')['the_number_of_cont_cbm'].max()
+            total_containers = bill_containers.sum()
+        elif 'the_number_of_cont_cbm' in df_filtered.columns:
+            total_containers = df_filtered['the_number_of_cont_cbm'].sum()
 
         return {
             "totalValue": float(total_value) if pd.notnull(total_value) else 0.0,
             "totalShipments": int(total_shipments) if pd.notnull(total_shipments) else 0,
             "totalShippers": int(total_shippers) if pd.notnull(total_shippers) else 0,
-            "totalWeight": float(total_weight) if pd.notnull(total_weight) else 0.0
+            "totalContainers": float(total_containers) if pd.notnull(total_containers) else 0.0
         }
 
     def get_charts_data(self, filters: Dict[str, Any] = None) -> Dict[str, Any]:

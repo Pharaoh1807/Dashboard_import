@@ -16,6 +16,7 @@ import {
   Plus,
   ArrowUpRight,
   Search,
+  RefreshCw,
   Settings
 } from 'lucide-react';
 import {
@@ -126,18 +127,50 @@ function App() {
     }
   };
 
-  const fetchDashboardData = async (id) => {
+  const fetchDashboardData = async (id, forceRefresh = false) => {
+    // Generate a cache key based on fileId and current filters
+    const cacheKey = `dashboard_data_${id}_${JSON.stringify(filters)}`;
+    
+    if (!forceRefresh) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        console.log("Using browser cache for dashboard data");
+        setData(JSON.parse(cached));
+        return;
+      }
+    }
+
     try {
-      const response = await axios.get(`/api/dashboard/${id}`, { 
+      if (forceRefresh) setLoading(true);
+      const response = await axios.get(`/api/dashboard/${id}`, {
         params: filters,
         paramsSerializer: {
-          indexes: null // prevents origins[] and sends origins=
+          indexes: null
         }
       });
       setData(response.data);
+      // Store in session storage for this session
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(response.data));
+      } catch (e) {
+        console.warn("Session storage full, skipped caching");
+      }
     } catch (error) {
       console.error("Failed to fetch dashboard data", error);
+    } finally {
+      if (forceRefresh) setLoading(false);
     }
+  };
+
+  const handleManualRefresh = async () => {
+    if (!fileId) return;
+    // Clear all dashboard caches in session storage
+    Object.keys(sessionStorage).forEach(key => {
+      if (key.startsWith('dashboard_data_')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    await fetchDashboardData(fileId, true);
   };
 
   const fetchFilterOptions = async (id) => {
@@ -301,6 +334,14 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            <button 
+              onClick={handleManualRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 bg-white border border-slate-200 px-5 py-3 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Sync
+            </button>
             <button
               onClick={() => {
                 const searchParams = new URLSearchParams();
@@ -339,14 +380,14 @@ function App() {
                 <Card title="Total Shipments" value={data.kpis.totalShipments.toLocaleString()} icon={TrendingUp} trend={8.2} />
                 <Card title="Total Value" value={`$${Math.round(data.kpis.totalValue).toLocaleString()}`} icon={FileSpreadsheet} subtext="USD" />
                 <Card title="Supplier Count" value={data.kpis.totalShippers} icon={Users} />
-                <Card title="Cargo Weight" value={Math.round(data.kpis.totalWeight).toLocaleString()} icon={Package} subtext="kg" />
+                <Card title="Total Containers" value={Math.round(data.kpis.totalContainers).toLocaleString()} icon={Package} subtext="Cont/CBM" />
               </div>
             )}
 
             {/* Charts Visualizations */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
               <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
-                <h3 className="text-xl font-bold text-slate-900 mb-8 flex items-center justify-between">Monthly Logistics Trend</h3>
+                <h3 className="text-xl font-bold text-slate-900 mb-8 flex items-center justify-between">Monthly Import Trend</h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data?.charts?.monthlyTrend || []}>
@@ -408,7 +449,7 @@ function App() {
                   </div>
                   <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full uppercase">USD Focused</span>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -424,7 +465,7 @@ function App() {
                         const maxVal = data?.charts?.topShippers?.[0]?.value || 1;
                         const percentage = (sh.value / (data?.kpis?.totalValue || 1)) * 100;
                         const widthPerc = (sh.value / maxVal) * 100;
-                        
+
                         return (
                           <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                             <td className="py-4 text-center">
@@ -459,7 +500,7 @@ function App() {
                   </div>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Frequency Focused</span>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -476,7 +517,7 @@ function App() {
                         const totalShipments = data?.kpis?.totalShipments || 1;
                         const percentage = (sh.count / totalShipments) * 100;
                         const widthPerc = (sh.count / maxCount) * 100;
-                        
+
                         return (
                           <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
                             <td className="py-4 text-center">
