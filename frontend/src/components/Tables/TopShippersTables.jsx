@@ -19,7 +19,7 @@ const TopShippersTables = ({ data }) => {
             <div className="p-2 bg-primary-50 rounded-lg">
               <TrendingUp className="w-5 h-5 text-primary-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Top Shippers by Value</h3>
+            <h3 className="text-xl font-bold text-slate-900">Top 10 Shippers by Value</h3>
           </div>
           <span className="text-[10px] font-bold text-primary-600 bg-primary-50 px-3 py-1 rounded-full uppercase">USD Focused</span>
         </div>
@@ -70,7 +70,7 @@ const TopShippersTables = ({ data }) => {
             <div className="p-2 bg-indigo-50 rounded-lg">
               <Activity className="w-5 h-5 text-indigo-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Shipment Leaders</h3>
+            <h3 className="text-xl font-bold text-slate-900">Top 10 Shippers By Shipment </h3>
           </div>
           <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">Volume Based</span>
         </div>
