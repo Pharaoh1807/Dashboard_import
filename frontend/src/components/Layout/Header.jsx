@@ -1,17 +1,19 @@
-import React from 'react';
 import {
   Search,
   Settings,
   Bell,
   User,
-  Zap
+  Zap,
+  ShieldCheck
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const Header = ({ lastSync }) => {
+  const { user } = useAuth();
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between py-6 mb-10 bg-[#f8fafc]/80 backdrop-blur-md border-b border-slate-200/50 -mx-10 px-10">
+    <header className="sticky top-0 z-50 flex items-center justify-between py-5 bg-[#f8fafc]/90 backdrop-blur-md border-b border-slate-200/50 px-10">
       <div className="flex items-center gap-6">
-        <div className="hidden lg:flex items-center gap-3 bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm group focus-within:ring-2 focus-within:ring-primary-100 transition-all">
+        <div className="hidden lg:flex items-center gap-3 bg-white px-6 py-2.5 rounded-2xl border border-slate-100 shadow-sm group focus-within:ring-2 focus-within:ring-primary-100 transition-all">
           <Search className="w-4 h-4 text-slate-400 group-focus-within:text-primary-500" />
           <input
             type="text"
@@ -41,12 +43,15 @@ const Header = ({ lastSync }) => {
         <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
         <div className="flex items-center gap-4 pl-2 group cursor-pointer">
           <div className="text-right hidden sm:block">
-            <p className="text-xs font-black text-slate-900">Administrator</p>
-            <p className="text-[9px] font-bold text-primary-500 uppercase tracking-tighter">System Overseer</p>
+            <p className="text-xs font-black text-slate-900 capitalize">{user?.username}</p>
+            <p className="text-[9px] font-black text-primary-500 uppercase tracking-widest flex items-center justify-end gap-1">
+              {user?.role === 'admin' && <ShieldCheck className="w-2.5 h-2.5 text-amber-500" />}
+              {user?.role}
+            </p>
           </div>
           <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center p-0.5 shadow-lg group-hover:scale-105 transition-transform duration-300">
-            <div className="w-full h-full rounded-[14px] bg-gradient-to-br from-primary-400 to-indigo-600 flex items-center justify-center">
-              <User className="w-6 h-6 text-white" />
+            <div className="w-full h-full rounded-[14px] bg-gradient-to-br from-primary-400 to-indigo-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+              {user?.username?.charAt(0)}
             </div>
           </div>
         </div>

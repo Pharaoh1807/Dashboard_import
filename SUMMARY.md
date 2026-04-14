@@ -10,18 +10,21 @@
 - **Framework**: `FastAPI` (hiệu suất cao, tự động tạo tài liệu API).
 - **Xử lý dữ liệu**: `Pandas`, `NumPy`.
 - **Database**: `MongoDB` (Sử dụng `motor` cho async driver).
-- **Xác thực SSL**: `certifi` (cần thiết cho kết nối MongoDB Atlas).
+- **Xác thực**: `PyJWT`, `bcrypt`.
+- **Phân quyền**: Role-based Access Control (Admin/User).
 
 ### Frontend (JavaScript)
 - **Framework**: `React` (với Vite).
 - **Styling**: `TailwindCSS`.
-- **Biểu đồ**: `Recharts` (Dựa trên history và package.json).
+- **Biểu đồ**: `Recharts`.
+- **State Management**: `Context API` (cho Auth).
 
 ## 🛠 Cách chạy dự án
 ### Backend
 1. Di chuyển vào thư mục backend: `cd backend`.
 2. Tạo venv và cài dependencies: `pip install -r requirements.txt`.
 3. Chạy server: `uvicorn main:app --reload` (Mặc định chạy ở port 8000).
+4. **Tạo Admin đầu tiên**: `python create_admin.py`.
 
 ### Frontend
 1. Di chuyển vào thư mục frontend: `cd frontend`.
@@ -31,14 +34,16 @@
 ## 💡 Lưu ý quan trọng cho AI
 1. **Xử lý tham số Filter**: Frontend (Axios) thường gửi mảng dưới dạng `origins[]`, do đó trong `main.py` cần sử dụng `alias="origins[]"` trong `Query`.
 2. **Data Mapping**: Class `DataProcessor` trong `processor.py` tự động ánh xạ các cột tiếng Việt/tiếng Anh không đồng nhất về các trường chuẩn như `bill_number`, `value`, `shipper`, `origins`.
-3. **MongoDB**: Dữ liệu được lưu trữ theo 2 collection:
-    - `files`: Lưu metadata của file được upload.
-    - `records`: Lưu chi tiết các dòng dữ liệu gắn với `file_id`.
-4. **Deploy**:
-    - Backend: Render.com.
-    - Frontend: GitHub Pages.
+3. **MongoDB**: Dữ liệu được lưu trữ theo 3 collection:
+    - `users`: Lưu thông tin tài khoản, email, vai trò và trạng thái phê duyệt.
+    - `files`: Lưu metadata gắn với `user_id`.
+    - `records`: Lưu chi tiết các dòng dữ liệu.
+4. **Data Isolation**: Mỗi User chỉ có thể truy cập file của chính họ (trừ Admin).
+5. **Approval System**: Tài khoản mới đăng ký cần được Admin phê duyệt mới được sử dụng API.
 
 ## 📌 Các tính năng chính
+- Hệ thống **Đăng ký/Đăng nhập** tích hợp Email và xác thực JWT.
+- **Phân quyền Admin**: Quản lý người dùng, chỉnh sửa email, cấp quyền và phê duyệt tài khoản.
 - Upload file Excel (tự động nhận diện header và sheet).
 - Dashboard hiển thị KPIs (Giá trị, lô hàng, container, nhà cung cấp).
 - Biểu đồ xu hướng, phân bổ xuất xứ và top nhà cung cấp.

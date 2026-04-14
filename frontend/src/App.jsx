@@ -5,16 +5,20 @@ import axios from 'axios';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import WelcomeScreen from './components/Layout/WelcomeScreen';
+import AuthScreen from './pages/AuthScreen';
+import { useAuth } from './context/AuthContext';
 
 // Stats & Charts
 import KPICards from './components/Stats/KPICards';
 import SupplierDynamics from './components/Charts/SupplierDynamics';
 import VolumeChart from './components/Charts/VolumeChart';
-import EconomicDistribution from './components/Charts/EconomicDistribution';
+import OriginsDistribution from './components/Charts/OriginsDistribution';
 
 // Tables
 import TopShippersTables from './components/Tables/TopShippersTables';
 import AuditLogTable from './components/Tables/AuditLogTable';
+import UserControl from './components/Admin/UserControl';
+import { ShieldCheck, LogOut } from 'lucide-react';
 
 axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -39,6 +43,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
+  const { user, logout } = useAuth();
   const [fileId, setFileId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -78,7 +83,7 @@ function App() {
       const response = await axios.post('/api/upload', formData);
       const newFileId = response.data.fileId;
       setFileId(newFileId);
-      localStorage.setItem('dashboard_file_id', newFileId);
+      localStorage.setItem(`dashboard_file_id_${user.id}`, newFileId);
       await fetchDashboardData(newFileId);
       await fetchFilterOptions(newFileId);
     } catch (error) {
@@ -136,13 +141,14 @@ function App() {
   };
 
   useEffect(() => {
-    const savedFileId = localStorage.getItem('dashboard_file_id');
+    if (!user) return; // Wait for user to be loaded
+    const savedFileId = localStorage.getItem(`dashboard_file_id_${user.id}`);
     if (savedFileId) {
       setFileId(savedFileId);
       fetchDashboardData(savedFileId);
       fetchFilterOptions(savedFileId);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (fileId) {
@@ -172,18 +178,49 @@ function App() {
     });
   }, [data?.table, tableColumnFilters]);
 
-  if (!fileId) {
-    return <WelcomeScreen handleUpload={handleUpload} loading={loading} />;
-  }
-
-  const handleLogout = () => {
+  const handleClearFile = () => {
+    localStorage.removeItem(`dashboard_file_id_${user.id}`);
     setFileId(null);
-    localStorage.removeItem('dashboard_file_id');
-    sessionStorage.clear();
+    setData(null);
+    setFilters({ shipper: [], origins: [], years: [], dateRange: [null, null] });
   };
 
+  const handleTerminate = () => {
+    sessionStorage.clear();
+    handleClearFile();
+  };
+
+  const handleLogout = () => {
+    logout();
+  };
+
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  if (!user.is_approved && user.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4 text-center">
+        <div className="max-w-md bg-white p-10 rounded-3xl shadow-xl border border-slate-100">
+          <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <ShieldCheck className="w-10 h-10 text-amber-500" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 mb-2">Account Pending Approval</h1>
+          <p className="text-slate-500 mb-8 font-medium">Your account has been created successfully, but it requires manual approval by an administrator before you can access the dashboard. Please contact your administrator for more information.</p>
+          <button
+            onClick={handleLogout}
+            className="px-8 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all flex items-center gap-2 mx-auto"
+          >
+            <LogOut size={18} />
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
+    <div className="min-h-screen bg-[#f8fafc] flex overflow-hidden">
       <Sidebar
         isExpanded={isSidebarHovered}
         setIsSidebarHovered={setIsSidebarHovered}
@@ -192,36 +229,44 @@ function App() {
         filters={filters}
         setFilters={setFilters}
         filterOptions={filterOptions}
+        onClearFile={handleClearFile}
+        onTerminate={handleTerminate}
         onLogout={handleLogout}
+        fileId={fileId}
       />
-
-      <main className={`flex-1 p-10 transition-all duration-500 ${isSidebarHovered ? 'ml-64' : 'ml-24'}`}>
+      <div className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-500 ${isSidebarHovered ? 'ml-64' : 'ml-24'}`}>
         <Header lastSync={lastSync} />
+        
+        <main className="flex-1 overflow-y-auto p-10 pt-2">
+          {!fileId && activeTab !== 'admin' ? (
+            <WelcomeScreen handleUpload={handleUpload} loading={loading} />
+          ) : activeTab === 'dashboard' ? (
+            <>
+              <KPICards kpis={data?.kpis} />
 
-        {activeTab === 'dashboard' ? (
-          <>
-            <KPICards kpis={data?.kpis} />
-            
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 mb-12">
-              <SupplierDynamics data={data} />
-              
-              <div className="flex flex-col gap-10">
-                <VolumeChart data={data} />
-                <EconomicDistribution data={data} />
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-10 mb-12">
+                <SupplierDynamics data={data} />
+
+                <div className="flex flex-col gap-10">
+                  <VolumeChart data={data} />
+                  <OriginsDistribution data={data} />
+                </div>
               </div>
-            </div>
 
-            <TopShippersTables data={data} />
-          </>
-        ) : (
-          <AuditLogTable
-            filteredTableData={filteredTableData}
-            tableColumnFilters={tableColumnFilters}
-            setTableColumnFilters={setTableColumnFilters}
-            displayColumns={displayColumns}
-          />
-        )}
-      </main>
+              <TopShippersTables data={data} />
+            </>
+          ) : activeTab === 'admin' ? (
+            <UserControl />
+          ) : (
+            <AuditLogTable
+              filteredTableData={filteredTableData}
+              tableColumnFilters={tableColumnFilters}
+              setTableColumnFilters={setTableColumnFilters}
+              displayColumns={displayColumns}
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

@@ -64,11 +64,18 @@ class DataProcessor:
         if rename_dict:
             self.df = self.df.rename(columns=rename_dict)
 
+        # Clean string data early to ensure correct filtering and grouping
+        for col in self.df.columns:
+            if self.df[col].dtype == object:
+                # Fill NaN with "Unknown" and strip whitespace
+                self.df[col] = self.df[col].fillna("Unknown").astype(str).str.strip()
+
         numeric_cols = ['value', 'quantity', 'price', 'gross_weight', 'import_tax', 'vat', 'the_number_of_cont_cbm']
         for col in numeric_cols:
             if col in self.df.columns:
+                # If numeric values were read as strings, clean them before conversion
                 if self.df[col].dtype == object:
-                    self.df[col] = self.df[col].astype(str).str.replace(',', '').str.replace('%', '').str.strip()
+                    self.df[col] = self.df[col].str.replace(',', '').str.replace('%', '').str.strip()
                 self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
         for col in ['etd', 'eta', 'declaration_date', 'ngày_đăng_ký', 'ngày_tờ_khai']:
@@ -80,12 +87,14 @@ class DataProcessor:
                         self.df[col] = pd.to_datetime(self.df[col], errors='coerce')
                 except:
                     self.df[col] = pd.to_datetime(self.df[col], errors='coerce')
-
+        
+        # Ensure final state for all columns
         for col in self.df.columns:
-            if self.df[col].dtype == object:
-                self.df[col] = self.df[col].fillna("Unknown").astype(str).str.strip()
-            elif self.df[col].dtype.name.startswith('datetime'):
+            if self.df[col].dtype.name.startswith('datetime'):
                 self.df[col] = self.df[col].fillna(pd.NaT)
+            elif self.df[col].dtype == object:
+                # Double check everything is string-cleaned
+                self.df[col] = self.df[col].astype(str).str.strip()
 
     def _get_valid_bills(self, df: pd.DataFrame) -> pd.DataFrame:
         if 'bill_number' not in df.columns: return pd.DataFrame()

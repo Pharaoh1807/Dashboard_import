@@ -10,10 +10,10 @@ import {
 import CustomChartTooltip from './CustomChartTooltip';
 import { COLORS } from '../../constants';
 
-const EconomicDistribution = ({ data }) => {
+const OriginsDistribution = ({ data }) => {
   return (
     <div className="bg-white p-6 rounded-[1.5rem] border border-slate-100 shadow-sm">
-      <h3 className="text-sm font-bold text-slate-900 mb-4">Economic Distribution</h3>
+      <h3 className="text-sm font-bold text-slate-900 mb-4">Origins Distribution</h3>
       <div className="h-48 relative">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -68,4 +68,4 @@ const EconomicDistribution = ({ data }) => {
   );
 };
 
-export default EconomicDistribution;
+export default OriginsDistribution;

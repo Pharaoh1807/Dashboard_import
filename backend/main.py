@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from typing import List, Optional, Dict, Any
@@ -11,6 +11,9 @@ import motor.motor_asyncio
 import certifi
 from dotenv import load_dotenv
 from processor import DataProcessor
+from routers import auth, admin
+from auth import get_current_user
+from database import db
 
 load_dotenv()
 
@@ -25,28 +28,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# MongoDB Configuration
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-client = motor.motor_asyncio.AsyncIOMotorClient(
-    MONGODB_URL,
-    tlsCAFile=certifi.where()
-)
-db = client.import_dashboard
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 # In-memory cache for performance (optional on free tier, help speed up subsequent requests)
 data_cache: Dict[str, DataProcessor] = {}
 
-async def get_processor(file_id: str) -> Optional[DataProcessor]:
+async def get_processor(file_id: str, current_user: dict) -> Optional[DataProcessor]:
+    # Check if file exists in our metadata
+    file_meta = await db.files.find_one({"_id": file_id})
+    if not file_meta:
+        return None
+        
+    # Authorization check
+    if not current_user.get("is_approved") and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Your account is pending approval by an admin.")
+
+    if file_meta.get("user_id") != current_user["_id"] and current_user.get("role") != "admin":
+        return None
+        
     # Check cache first
     if file_id in data_cache:
         return data_cache[file_id]
-    
+        
     # Fetch from MongoDB
     try:
-        # Check if file exists in our metadata
-        file_meta = await db.files.find_one({"_id": file_id})
-        if not file_meta:
-            return None
             
         # Fetch all records for this file
         cursor = db.records.find({"file_id": file_id})
@@ -68,7 +74,10 @@ async def get_processor(file_id: str) -> Optional[DataProcessor]:
         return None
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_approved") and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Your account is pending approval by an admin.")
+        
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -84,7 +93,8 @@ async def upload_file(file: UploadFile = File(...)):
             "_id": file_id,
             "filename": file.filename,
             "rowCount": len(df),
-            "uploadedAt": pd.Timestamp.now()
+            "uploadedAt": pd.Timestamp.now(),
+            "user_id": current_user["_id"]
         })
         
         # 2. Save records to MongoDB
@@ -127,9 +137,10 @@ async def get_dashboard(
     date_range: Optional[List[str]] = Query(None, alias="dateRange[]"),
     date_range_raw: Optional[List[str]] = Query(None, alias="dateRange"),
     years: Optional[List[str]] = Query(None, alias="years[]"),
-    years_raw: Optional[List[str]] = Query(None, alias="years")
+    years_raw: Optional[List[str]] = Query(None, alias="years"),
+    current_user: dict = Depends(get_current_user)
 ):
-    processor = await get_processor(file_id)
+    processor = await get_processor(file_id, current_user)
     if not processor:
         raise HTTPException(status_code=404, detail="File session-data not found in Database.")
     
@@ -169,9 +180,10 @@ async def export_data(
     date_range: Optional[List[str]] = Query(None, alias="dateRange[]"),
     date_range_raw: Optional[List[str]] = Query(None, alias="dateRange"),
     years: Optional[List[str]] = Query(None, alias="years[]"),
-    years_raw: Optional[List[str]] = Query(None, alias="years")
+    years_raw: Optional[List[str]] = Query(None, alias="years"),
+    current_user: dict = Depends(get_current_user)
 ):
-    processor = await get_processor(file_id)
+    processor = await get_processor(file_id, current_user)
     if not processor:
         raise HTTPException(status_code=404, detail="File session not found.")
         
@@ -205,8 +217,8 @@ async def export_data(
     return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 @app.get("/api/filters/{file_id}")
-async def get_filters(file_id: str):
-    processor = await get_processor(file_id)
+async def get_filters(file_id: str, current_user: dict = Depends(get_current_user)):
+    processor = await get_processor(file_id, current_user)
     if not processor:
         raise HTTPException(status_code=404, detail="File session not found.")
     return processor.get_filter_options()
