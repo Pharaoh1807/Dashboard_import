@@ -51,7 +51,7 @@ const Sidebar = ({
           {isExpanded && (
             <div className="animate-in fade-in slide-in-from-left duration-500">
               <h1 className="text-2xl font-black tracking-tighter leading-none italic bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">PHARAOH</h1>
-              <p className="text-[10px] font-black text-primary-500 tracking-[0.3em] mt-1 uppercase drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]">Analysis OS</p>
+              <p className="text-[10px] font-black text-primary-500 tracking-[0.3em] mt-1 uppercase drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]">Analysis Automatic</p>
             </div>
           )}
         </div>
@@ -168,23 +168,23 @@ const Sidebar = ({
             className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all group border border-transparent shadow-sm ${isDark ? 'text-primary-400 hover:bg-primary-500/10 hover:border-primary-500/20' : 'text-primary-600 hover:bg-primary-50 hover:border-primary-100'}`}
           >
             <FileUp className="w-5 h-5 flex-shrink-0 group-hover:-translate-y-1 transition-transform" />
-            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">New Stream</span>}
+            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">New File Upload</span>}
           </button>
-          
+
           <button
             onClick={onTerminate}
             className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all group border border-transparent shadow-sm ${isDark ? 'text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/20' : 'text-amber-600 hover:bg-amber-50 hover:border-amber-100'}`}
           >
             <Trash2 className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform" />
-            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">Hard Reset</span>}
+            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">Terminate File</span>}
           </button>
-          
+
           <button
             onClick={onLogout}
             className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all group border border-transparent shadow-sm ${isDark ? 'text-red-400 hover:bg-red-500/10 hover:border-red-500/20' : 'text-red-600 hover:bg-red-50 hover:border-red-100'}`}
           >
             <LogOut className="w-5 h-5 flex-shrink-0 group-hover:rotate-12 transition-transform" />
-            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">Terminate Session</span>}
+            {isExpanded && <span className="text-sm font-black tracking-tight whitespace-nowrap">Log Out</span>}
           </button>
         </div>
       </div>

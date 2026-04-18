@@ -6,11 +6,12 @@ import {
   Zap,
   ShieldCheck,
   Sun,
-  Moon
+  Moon,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const Header = ({ lastSync, isDark, toggleTheme }) => {
+const Header = ({ lastSync, isDark, toggleTheme, onExport, hasData }) => {
   const { user } = useAuth();
 
   return (
@@ -35,7 +36,7 @@ const Header = ({ lastSync, isDark, toggleTheme }) => {
 
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
-           <button 
+            <button 
               onClick={toggleTheme}
               className={`p-2.5 rounded-xl border transition-all duration-300 group hover:scale-110 active:scale-95 ${isDark ? 'bg-slate-800 border-slate-700 text-amber-400 shadow-lg shadow-amber-900/20' : 'bg-white border-slate-200 text-slate-400 hover:text-indigo-600 shadow-sm'}`}
               title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -43,6 +44,17 @@ const Header = ({ lastSync, isDark, toggleTheme }) => {
               {isDark ? <Sun size={20} fill="currentColor" /> : <Moon size={20} />}
             </button>
             <div className={`w-px h-6 mx-2 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}></div>
+
+            {hasData && (
+              <button 
+                onClick={onExport}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border transition-all duration-300 group hover:scale-105 active:scale-95 font-black text-[10px] uppercase tracking-widest ${isDark ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-900/40 hover:bg-indigo-500' : 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'}`}
+                title="Export Analytics to Excel"
+              >
+                <Download size={18} className="group-hover:animate-bounce" />
+                <span>Export Report</span>
+              </button>
+            )}
         </div>
 
         <div className="flex items-center gap-4">

@@ -2,6 +2,14 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
 import io
+import unicodedata
+
+def remove_accents(input_str):
+    if not input_str: return input_str
+    # Explicitly handle Vietnamese 'đ' and 'Đ' which are not caught by NFKD normalization
+    input_str = str(input_str).replace("đ", "d").replace("Đ", "D")
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 class DataProcessor:
     def __init__(self, df: pd.DataFrame = None):
@@ -27,20 +35,25 @@ class DataProcessor:
     def _preprocess(self):
         if self.df is None: return
 
-        # Clean column names
-        self.df.columns = ["".join([c if c.isalnum() else "_" for c in str(col).strip().lower()]) for col in self.df.columns]
-        self.df.columns = ["_".join([part for part in str(col).split("_") if part]) for col in self.df.columns]
+        # Clean column names: remove accents, spaces, and handle casing
+        new_cols = []
+        for col in self.df.columns:
+            clean_col = remove_accents(str(col)).strip().lower()
+            clean_col = "".join([c if c.isalnum() else "_" for c in clean_col])
+            clean_col = "_".join([part for part in clean_col.split("_") if part])
+            new_cols.append(clean_col)
+        self.df.columns = new_cols
 
         standard_map = {
-            'bill_number': ['bill_number', 'bill_no', 'số_bill', 'so_bill','số_vận_đơn', 'mã_vận_đơn', 'ma_van_don', 'vận_đơn', 'van_don'],
-            'value': ['value', 'giá_trị', 'gia_tri', 'thành_tiền', 'thanh_tien', 'total_amount', 'trị_giá', 'trị_giá_khai_báo_usd'],
-            'quantity': ['quantity', 'số_lượng', 'so_luong', 'lượng'],
-            'shipper': ['shipper', 'người_gửi', 'nguoi_gui', 'supplier', 'nhà_cung_cấp', 'người_xuất_khẩu'],
-            'origins': ['origins', 'origin', 'xuất_xứ', 'xuat_xu', 'nước_xuất_xứ'],
-            'ngày_đăng_ký': ['ngày_đăng_ký', 'ngay_dang_ky', 'declaration_date', 'ngày_tờ_khai', 'ngay_to_khai'],
-            'the_number_of_cont_cbm': ['số_lượng_cont', 'so_luong_cont', 'số_cont', 'so_cont', 'cont_cbm', 'cont', 'cbm', 'sl'],
-            'import_tax_vnd': ['import_tax_vnđ', 'import_tax_vnd', 'thuế_nhập_khẩu', 'thue_nhap_khau', 'tiền_thuế_nhập_khẩu'],
-            'vat_vnd': ['vat_tax_vnđ', 'vat_tax_vnd', 'thuế_vat', 'thue_vat', 'tiền_thuế_gtgt', 'thuế_gtgt']
+            'bill_number': ['bill_number', 'bill_no', 'so_bill', 'so_van_don', 'ma_van_don', 'van_don'],
+            'value': ['value', 'tri_gia_khai_bao_usd', 'gia_tri', 'thanh_tien', 'total_amount', 'tri_gia'],
+            'quantity': ['quantity', 'luong', 'so_luong'],
+            'shipper': ['shipper', 'nguoi_xuat_khau', 'nguoi_gui', 'supplier', 'nha_cung_cap'],
+            'origins': ['origins', 'origin', 'xuat_xu', 'nuoc_xuat_xu'],
+            'ngay_dang_ky': ['ngay_dang_ky', 'declaration_date', 'ngay_to_khai'],
+            'the_number_of_cont_cbm': ['so_luong_cont', 'so_cont', 'cont_cbm', 'cont', 'cbm', 'sl'],
+            'import_tax_vnd': ['import_tax_vnd', 'thue_nhap_khau', 'tien_thue_nhap_khau', 'thue_nk_vnd'],
+            'vat_vnd': ['vat_tax_vnd', 'thue_vat', 'tien_thue_gtgt', 'thue_gtgt', 'vat_vnd']
         }
 
         rename_dict = {}
@@ -57,9 +70,9 @@ class DataProcessor:
         # Drop unnecessary columns aggressively to save RAM and Processing Time
         desired_columns = {
             'bill_number', 'value', 'quantity', 'shipper', 'origins', 
-            'ngày_đăng_ký', 'the_number_of_cont_cbm',
+            'ngay_dang_ky', 'the_number_of_cont_cbm',
             'payment', 'customs_dp', 'declaration_number', 
-            'description', 'ngày_tờ_khai', 'price', 
+            'description', 'ngay_to_khai', 'price', 
             'gross_weight', 'import_tax_vnd', 'vat_vnd'
         }
         cols_to_keep = [col for col in self.df.columns if col in desired_columns]
@@ -67,7 +80,7 @@ class DataProcessor:
             self.df = self.df[cols_to_keep]
 
         numeric_cols_set = {'value', 'quantity', 'price', 'gross_weight', 'import_tax_vnd', 'vat_vnd', 'the_number_of_cont_cbm'}
-        date_cols_set = {'etd', 'eta', 'declaration_date', 'ngày_đăng_ký', 'ngày_tờ_khai'}
+        date_cols_set = {'etd', 'eta', 'declaration_date', 'ngay_dang_ky', 'ngay_to_khai'}
         standard_cols_set = {'bill_number', 'shipper', 'origins'}
 
         for col in self.df.columns:
@@ -137,7 +150,7 @@ class DataProcessor:
             "totalVat": float(total_vat) if pd.notnull(total_vat) else 0.0
         }
 
-    def get_charts_data(self, filters: Dict[str, Any] = None) -> Dict[str, Any]:
+    def get_charts_data(self, filters: Dict[str, Any] = None, shipper_limit: int = 10, origin_limit: int = 5) -> Dict[str, Any]:
         df_filtered = self._apply_filters(filters)
         if df_filtered.empty:
             return {"monthlyTrend": [], "topShippers": [], "originsDistribution": []}
@@ -145,13 +158,13 @@ class DataProcessor:
         years_filter = filters.get('years', []) if filters else []
         is_year_filtered = isinstance(years_filter, list) and len(years_filter) == 1
         date_format = '%Y-%m' if is_year_filtered else '%Y'
-        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in df_filtered.columns else 'eta'
+        date_col = 'ngay_dang_ky' if 'ngay_dang_ky' in df_filtered.columns else 'eta'
 
         return {
             "isYearly": not is_year_filtered,
             "monthlyTrend": self._prepare_volume_trend(df_filtered, date_col, date_format),
-            "originsDistribution": self._prepare_origins_distribution(df_filtered),
-            **self._prepare_shipper_insights(df_filtered, date_col, date_format)
+            "originsDistribution": self._prepare_origins_distribution(df_filtered, limit=origin_limit),
+            **self._prepare_shipper_insights(df_filtered, date_col, date_format, limit=shipper_limit)
         }
 
     def _prepare_volume_trend(self, df: pd.DataFrame, date_col: str, date_format: str) -> List[Dict[str, Any]]:
@@ -167,22 +180,26 @@ class DataProcessor:
             return [{"month": str(row['time_period']), "value": int(row['bill_number'])} for _, row in trend.iterrows()]
         except: return []
 
-    def _prepare_shipper_insights(self, df: pd.DataFrame, date_col: str, date_format: str) -> Dict[str, Any]:
+    def _prepare_shipper_insights(self, df: pd.DataFrame, date_col: str, date_format: str, limit: int = 10) -> Dict[str, Any]:
         if 'shipper' not in df.columns: return {}
         res = {}
         try:
             # Top by Value
-            val_agg = df.groupby('shipper')['value'].sum().sort_values(ascending=False).head(10).reset_index()
+            val_query = df.groupby('shipper')['value'].sum().sort_values(ascending=False)
+            if limit: val_query = val_query.head(limit)
+            val_agg = val_query.reset_index()
             res["topShippers"] = [{"shipper": str(r['shipper']), "value": float(r['value'])} for _, r in val_agg.iterrows()]
 
             # Top by Shipments
             valid_df = self._get_valid_bills(df)
             if not valid_df.empty:
-                ship_agg = valid_df.groupby('shipper')['bill_number'].nunique().sort_values(ascending=False).head(10).reset_index()
+                ship_query = valid_df.groupby('shipper')['bill_number'].nunique().sort_values(ascending=False)
+                if limit: ship_query = ship_query.head(limit)
+                ship_agg = ship_query.reset_index()
                 ship_agg.columns = ['shipper', 'count']
                 res["shippersByShipments"] = [{"shipper": str(r['shipper']), "count": int(r['count'])} for _, r in ship_agg.iterrows()]
 
-                # Dynamics (Line Chart)
+                # Dynamics (Line Chart) - Always limit to 5 for the line chart to keep it readable, but let's make it configurable
                 top_5 = ship_agg['shipper'].head(5).tolist()
                 if top_5:
                     trend_df = valid_df[valid_df['shipper'].isin(top_5)].copy()
@@ -195,10 +212,12 @@ class DataProcessor:
         except: pass
         return res
 
-    def _prepare_origins_distribution(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _prepare_origins_distribution(self, df: pd.DataFrame, limit: int = 5) -> List[Dict[str, Any]]:
         if 'origins' not in df.columns or 'value' not in df.columns: return []
         try:
-            origins = df.groupby('origins')['value'].sum().sort_values(ascending=False).head(5).reset_index()
+            origins_query = df.groupby('origins')['value'].sum().sort_values(ascending=False)
+            if limit: origins_query = origins_query.head(limit)
+            origins = origins_query.reset_index()
             return [{"origins": str(r['origins']), "value": float(r['value'])} for _, r in origins.iterrows()]
         except: return []
 
@@ -216,7 +235,7 @@ class DataProcessor:
                 vals = temp_df[temp_df[col] != "UNKNOWN"][col].unique()
                 options[col] = sorted(list(set([str(v).strip() for v in vals if v])))
         
-        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in self.df.columns else 'eta'
+        date_col = 'ngay_dang_ky' if 'ngay_dang_ky' in self.df.columns else 'eta'
         if date_col in self.df.columns:
             temp_filters = {k: v for k, v in (filters or {}).items() if k != 'years'}
             temp_df = self._apply_filters(temp_filters)
@@ -240,7 +259,7 @@ class DataProcessor:
         if filters.get('shipper'): df = df[df['shipper'].isin(filters['shipper'])]
         if filters.get('origins'): df = df[df['origins'].isin(filters['origins'])]
 
-        date_col = 'ngày_đăng_ký' if 'ngày_đăng_ký' in df.columns else 'eta'
+        date_col = 'ngay_dang_ky' if 'ngay_dang_ky' in df.columns else 'eta'
         if filters.get('years'):
             years_int = [int(y) for y in filters['years']]
             df = df[df[date_col].dt.year.isin(years_int)]

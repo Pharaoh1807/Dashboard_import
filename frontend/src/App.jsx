@@ -5,7 +5,7 @@ import axios from 'axios';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import WelcomeScreen from './components/Layout/WelcomeScreen';
-import AuthScreen from './pages/AuthScreen';
+import LogInOut from './pages/LogInOut';
 import { useAuth } from './context/AuthContext';
 
 // Stats & Charts
@@ -50,7 +50,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [lastSync, setLastSync] = useState('Never');
-  
+
   // New states for sheet selection
   const [availableSheets, setAvailableSheets] = useState([]);
   const [pendingFile, setPendingFile] = useState(null);
@@ -63,7 +63,7 @@ function App() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
       document.documentElement.classList.add('dark');
       document.body.classList.add('dark');
@@ -107,7 +107,7 @@ function App() {
 
     setLoading(true);
     setLoadingMessage("Checking file sheets...");
-    
+
     // If we're selecting a sheet, we already cleared these. 
     // If it's a new upload, we clear them.
     if (e?.target?.files?.[0]) {
@@ -123,7 +123,7 @@ function App() {
     try {
       // If we don't have a sheet name yet, we just inspect the file
       const response = await axios.post('/api/upload', formData);
-      
+
       if (response.data.sheets) {
         setAvailableSheets(response.data.sheets);
         setShowSheetSelector(true);
@@ -273,8 +273,39 @@ function App() {
     logout();
   };
 
+  const handleExport = async () => {
+    if (!fileId) return;
+    try {
+      // Clean filters to remove empty arrays or null values before sending
+      const cleanFilters = {};
+      Object.keys(filters).forEach(key => {
+        if (Array.isArray(filters[key])) {
+          const validVals = filters[key].filter(v => v !== null && v !== undefined && v !== '');
+          if (validVals.length > 0) cleanFilters[key] = validVals;
+        }
+      });
+
+      const response = await axios.get(`/api/export/${fileId}`, {
+        params: cleanFilters,
+        paramsSerializer: { indexes: null },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `analytics_export_${fileId.substring(0, 8)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Export failed", error);
+      alert("Export failed. Please try again.");
+    }
+  };
+
   if (!user) {
-    return <AuthScreen />;
+    return <LogInOut />;
   }
 
   if (!user.is_approved && user.role !== 'admin') {
@@ -315,8 +346,8 @@ function App() {
         isDark={isDark}
       />
       <div className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-500 ${isSidebarHovered ? 'ml-72' : 'ml-24'}`}>
-        <Header lastSync={lastSync} isDark={isDark} toggleTheme={toggleTheme} />
-        
+        <Header lastSync={lastSync} isDark={isDark} toggleTheme={toggleTheme} onExport={handleExport} hasData={!!data} />
+
         <main className="flex-1 overflow-y-auto p-10 pt-2">
           {!fileId && activeTab !== 'admin' ? (
             showSheetSelector ? (
@@ -342,7 +373,7 @@ function App() {
                           </button>
                         ))}
                       </div>
-                      <button 
+                      <button
                         onClick={() => { setShowSheetSelector(false); setPendingFile(null); }}
                         className="mt-8 text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors w-full text-center"
                       >

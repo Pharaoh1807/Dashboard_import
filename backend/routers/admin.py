@@ -58,6 +58,7 @@ async def update_user(user_id: str, user_update: UserUpdate, current_admin: dict
     updated_user = await db.users.find_one({"_id": user_id})
     return UserResponse(
         id=updated_user["_id"], 
+        _id=updated_user["_id"],
         username=updated_user["username"], 
         email=updated_user.get("email"),
         is_approved=updated_user.get("is_approved", False),

@@ -216,28 +216,67 @@ async def export_data(
     final_date_range = (date_range or []) + (date_range_raw or [])
     final_years = (years or []) + (years_raw or [])
     
+    def clean(vals):
+        return [v for v in vals if v and str(v).lower() not in ['null', 'undefined', '']] if vals else None
+
     filters = {
-        "shipper": final_shipper if final_shipper else None,
-        "origins": final_origins if final_origins else None,
-        "date_range": final_date_range if len(final_date_range) == 2 else None,
-        "years": final_years if final_years else None
+        "shipper": clean(final_shipper),
+        "origins": clean(final_origins),
+        "date_range": clean(final_date_range),
+        "years": clean(final_years)
     }
+    if filters["date_range"] and len(filters["date_range"]) != 2:
+        filters["date_range"] = None
+
     
     from fastapi.responses import StreamingResponse
 
+    # 1. Prepare Filtered Data
     df_filtered = processor._apply_filters(filters)
+    
+    # 2. Extract analytical data using existing methods - NO LIMITS for Excel export
+    kpis = processor.get_kpis(filters)
+    charts_data = processor.get_charts_data(filters, shipper_limit=None, origin_limit=None)
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_filtered.to_excel(writer, index=False, sheet_name='Filtered Data')
+        # Sheet 1: Raw Data
+        df_filtered.to_excel(writer, index=False, sheet_name='Filtered Records')
         
-        kpis = processor.get_kpis(filters)
-        summary_df = pd.DataFrame([kpis])
-        summary_df.to_excel(writer, index=False, sheet_name='Summary')
+        # Sheet 2: KPIs Summary
+        pd.DataFrame([kpis]).to_excel(writer, index=False, sheet_name='KPIs Summary')
+        
+        # Sheet 3: Supplier Dynamics (Trend)
+        if "shippersTrend" in charts_data:
+            trend_df = pd.DataFrame(charts_data["shippersTrend"])
+            trend_df.to_excel(writer, index=False, sheet_name='Supplier Dynamics')
+            
+        # Sheet 4: Origins Distribution (Pie)
+        if "originsDistribution" in charts_data:
+            origins_df = pd.DataFrame(charts_data["originsDistribution"])
+            origins_df.to_excel(writer, index=False, sheet_name='Origins Distribution')
+            
+        # Sheet 5: Volume Trend (Bar)
+        if "monthlyTrend" in charts_data:
+            volume_df = pd.DataFrame(charts_data["monthlyTrend"])
+            volume_df.to_excel(writer, index=False, sheet_name='Volume Trend')
+            
+        # Sheet 6: Top Shippers (By Value)
+        top_shippers = pd.DataFrame(charts_data.get("topShippers", []))
+        if not top_shippers.empty:
+            top_shippers.columns = ['Shipper', 'Total Value (USD)']
+            top_shippers.to_excel(writer, index=False, sheet_name='Top Shippers (Value)')
+            
+        # Sheet 7: Top Shippers (By Shipments)
+        top_by_shipments = pd.DataFrame(charts_data.get("shippersByShipments", []))
+        if not top_by_shipments.empty:
+            top_by_shipments.columns = ['Shipper', 'Shipment Count']
+            top_by_shipments.to_excel(writer, index=False, sheet_name='Top Shippers (Count)')
 
     output.seek(0)
     
-    headers = { 'Content-Disposition': f'attachment; filename="import_export_{file_id[:8]}.xlsx"' }
+    filename = f"analytics_export_{file_id[:8]}.xlsx"
+    headers = { 'Content-Disposition': f'attachment; filename="{filename}"' }
     return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 @app.get("/api/filters/{file_id}")

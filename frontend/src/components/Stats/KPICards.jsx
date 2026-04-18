@@ -16,10 +16,18 @@ const KPICards = ({ kpis, isDark }) => {
 
   const formatValue = (val, isCurrency = false, isVnd = false) => {
     if (val === undefined || val === null) return '0';
+    
     if (isCurrency) {
       if (isVnd) {
-        return (val / 1e9).toFixed(2) + 'B';
+        // Vietnamese Currency Formatting (Tỷ / Tr)
+        if (Math.abs(val) >= 1e9) {
+          return (val / 1e9).toFixed(2) + ' Tỷ';
+        } else if (Math.abs(val) >= 1e6) {
+          return (val / 1e6).toFixed(0) + ' Tr';
+        }
+        return val.toLocaleString();
       }
+      // USD Currency Formatting
       return (val / 1e6).toFixed(2) + 'M';
     }
     return val.toLocaleString();
@@ -74,7 +82,7 @@ const KPICards = ({ kpis, isDark }) => {
       color: isDark ? 'text-rose-400' : 'text-rose-600',
       bgIcon: isDark ? 'bg-rose-500/10' : 'bg-rose-50',
       glow: 'shadow-rose-500/20',
-      tooltip: 'Tổng tiền thuế nhập khẩu (Tỷ VNĐ)'
+      tooltip: 'Tổng tiền thuế nhập khẩu (Tỷ/Tr VNĐ)'
     },
     {
       label: 'VAT TAX',
@@ -84,14 +92,14 @@ const KPICards = ({ kpis, isDark }) => {
       color: isDark ? 'text-fuchsia-400' : 'text-fuchsia-600',
       bgIcon: isDark ? 'bg-fuchsia-500/10' : 'bg-fuchsia-50',
       glow: 'shadow-fuchsia-500/20',
-      tooltip: 'Tổng tiền thuế GTGT (Tỷ VNĐ)'
+      tooltip: 'Tổng tiền thuế GTGT (Tỷ/Tr VNĐ)'
     }
   ];
 
   if (!mounted) return null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-8">
       {kpiData.map((item, index) => (
         <div
           key={index}

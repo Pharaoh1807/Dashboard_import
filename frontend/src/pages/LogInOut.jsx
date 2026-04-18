@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus } from 'lucide-react';
 
-export default function AuthScreen() {
+export default function LogInOut() {
     const { login, register } = useAuth();
     const [isLoginView, setIsLoginView] = useState(true);
     const [username, setUsername] = useState('');
@@ -23,7 +23,14 @@ export default function AuthScreen() {
                 await register(username, password, email);
             }
         } catch (err) {
-            setError(err.response?.data?.detail || 'Authentication failed. Please try again.');
+            const detail = err.response?.data?.detail;
+            if (typeof detail === 'string') {
+                setError(detail);
+            } else if (Array.isArray(detail)) {
+                setError(detail[0]?.msg || 'Validation error');
+            } else {
+                setError('Authentication failed. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
