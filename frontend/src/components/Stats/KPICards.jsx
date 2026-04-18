@@ -1,65 +1,125 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Activity,
-  Globe,
   DollarSign,
-  TrendingUp,
-  Package
+  Ship,
+  Factory,
+  Package,
+  Receipt
 } from 'lucide-react';
 
-const KPICards = ({ kpis }) => {
+const KPICards = ({ kpis, isDark }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const formatValue = (val, isCurrency = false, isVnd = false) => {
+    if (val === undefined || val === null) return '0';
+    if (isCurrency) {
+      if (isVnd) {
+        return (val / 1e9).toFixed(2) + 'B';
+      }
+      return (val / 1e6).toFixed(2) + 'M';
+    }
+    return val.toLocaleString();
+  };
+
   const kpiData = [
     {
-      label: 'Total Value',
-      value: kpis?.totalValue >= 1e9 
-        ? `$${(kpis.totalValue / 1e9).toFixed(2)}B`
-        : kpis?.totalValue >= 1e6
-        ? `$${(kpis.totalValue / 1e6).toFixed(2)}M`
-        : `$${(kpis?.totalValue || 0).toLocaleString()}`,
+      label: 'TOTAL VALUE',
+      value: formatValue(kpis?.totalValue, true, false),
+      unit: 'USD',
       icon: DollarSign,
-      color: 'bg-primary-500',
-      percentage: 'Primary Value Indicator'
+      color: isDark ? 'text-emerald-400' : 'text-emerald-600',
+      bgIcon: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50',
+      glow: 'shadow-emerald-500/20',
+      tooltip: 'Tổng trị giá khai báo USD'
     },
     {
-      label: 'Total Shipment',
-      value: (kpis?.totalShipments || 0).toLocaleString(),
-      icon: Activity,
-      color: 'bg-indigo-500',
-      percentage: 'Total Processed Bill Numbers'
+      label: 'SHIPMENTS',
+      value: formatValue(kpis?.totalShipments),
+      unit: 'Units',
+      icon: Ship,
+      color: isDark ? 'text-blue-400' : 'text-blue-600',
+      bgIcon: isDark ? 'bg-blue-500/10' : 'bg-blue-50',
+      glow: 'shadow-blue-500/20',
+      tooltip: 'Tổng số lô hàng đã xử lý'
     },
     {
-      label: 'Operational Scale',
-      value: (kpis?.totalShippers || 0).toLocaleString(),
-      icon: TrendingUp,
-      color: 'bg-emerald-500',
-      percentage: 'Unique Active Suppliers'
+      label: 'SUPPLIERS',
+      value: formatValue(kpis?.totalShippers),
+      unit: 'Active',
+      icon: Factory,
+      color: isDark ? 'text-violet-400' : 'text-violet-600',
+      bgIcon: isDark ? 'bg-violet-500/10' : 'bg-violet-50',
+      glow: 'shadow-violet-500/20',
+      tooltip: 'Số lượng nhà cung cấp duy nhất'
     },
     {
-      label: 'Total Conts',
-      value: (kpis?.totalContainers || 0).toLocaleString(),
+      label: 'CONTAINERS',
+      value: formatValue(kpis?.totalContainers),
+      unit: 'Cont',
       icon: Package,
-      color: 'bg-blue-500',
-      percentage: 'Total Capacity (CBM/Cont)'
+      color: isDark ? 'text-amber-400' : 'text-amber-600',
+      bgIcon: isDark ? 'bg-amber-500/10' : 'bg-amber-50',
+      glow: 'shadow-amber-500/20',
+      tooltip: 'Tổng số lượng Container / CBM'
+    },
+    {
+      label: 'IMPORT TAX',
+      value: formatValue(kpis?.totalImportTax, true, true),
+      unit: 'VND',
+      icon: Receipt,
+      color: isDark ? 'text-rose-400' : 'text-rose-600',
+      bgIcon: isDark ? 'bg-rose-500/10' : 'bg-rose-50',
+      glow: 'shadow-rose-500/20',
+      tooltip: 'Tổng tiền thuế nhập khẩu (Tỷ VNĐ)'
+    },
+    {
+      label: 'VAT TAX',
+      value: formatValue(kpis?.totalVat, true, true),
+      unit: 'VND',
+      icon: Receipt,
+      color: isDark ? 'text-fuchsia-400' : 'text-fuchsia-600',
+      bgIcon: isDark ? 'bg-fuchsia-500/10' : 'bg-fuchsia-50',
+      glow: 'shadow-fuchsia-500/20',
+      tooltip: 'Tổng tiền thuế GTGT (Tỷ VNĐ)'
     }
   ];
 
+  if (!mounted) return null;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-      {kpiData.map((item, idx) => (
-        <div key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 group">
-          <div className="flex items-center gap-4 mb-6">
-            <div className={`p-3 rounded-2xl ${item.color} text-white shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300`}>
-              <item.icon className="w-5 h-5" />
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+      {kpiData.map((item, index) => (
+        <div
+          key={index}
+          title={item.tooltip}
+          className={`group flex flex-col p-4 rounded-3xl border transition-all duration-300 hover:scale-[1.02] ${
+            isDark 
+              ? 'bg-[#1e1e2f]/80 border-slate-800 backdrop-blur-md shadow-black/20 hover:shadow-primary-500/10' 
+              : 'bg-white border-slate-100 shadow-sm hover:shadow-lg'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className={`p-2 rounded-xl transition-all duration-500 ${item.bgIcon} ${isDark ? item.glow : ''}`}>
+              <item.icon className={`w-4 h-4 ${item.color}`} />
             </div>
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</p>
-              <h3 className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{item.value}</h3>
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-            <span className="text-[10px] font-bold text-slate-400 group-hover:text-primary-500 transition-colors uppercase tracking-tight">
-              {item.percentage}
+            <span className={`text-[9px] font-black tracking-widest uppercase opacity-40 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {item.unit}
             </span>
+          </div>
+          
+          <div>
+            <p className={`text-[9px] font-black tracking-widest uppercase mb-1 opacity-60 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {item.label}
+            </p>
+            <div className="flex items-baseline gap-1">
+              <span className={`text-xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {item.value}
+              </span>
+            </div>
           </div>
         </div>
       ))}

@@ -11,3 +11,4 @@ certifi
 PyJWT
 bcrypt
 pydantic[email]
+python-calamine

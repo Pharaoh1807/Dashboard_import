@@ -30,9 +30,9 @@ export default function AuthScreen() {
     };
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-                <div className="bg-blue-600 p-8 text-center">
+        <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 flex items-center justify-center p-4 transition-colors duration-500">
+            <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-xl overflow-hidden border border-transparent dark:border-slate-800">
+                <div className="bg-blue-600 dark:bg-blue-700 p-8 text-center">
                     <h1 className="text-3xl font-bold text-white mb-2">Import Dashboard</h1>
                     <p className="text-blue-100">
                         {isLoginView ? 'Sign in to access your data' : 'Create an account to get started'}
@@ -49,7 +49,7 @@ export default function AuthScreen() {
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {!isLoginView && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Email Address</label>
                                 <div className="relative">
                                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                                         <LogIn size={18} className="rotate-90" />
@@ -58,7 +58,7 @@ export default function AuthScreen() {
                                         type="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
+                                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
                                         placeholder="Enter your email"
                                         required
                                     />
@@ -66,7 +66,7 @@ export default function AuthScreen() {
                             </div>
                         )}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Username</label>
                             <div className="relative">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                                     <User size={20} />
@@ -75,7 +75,7 @@ export default function AuthScreen() {
                                     type="text"
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
+                                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
                                     placeholder="Enter your username"
                                     required
                                 />
@@ -83,7 +83,7 @@ export default function AuthScreen() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Password</label>
                             <div className="relative">
                                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                                     <Lock size={20} />
@@ -92,7 +92,7 @@ export default function AuthScreen() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
+                                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors shadow-sm outline-none"
                                     placeholder="Enter your password"
                                     required
                                 />

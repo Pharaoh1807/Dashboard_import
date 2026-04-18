@@ -74,7 +74,11 @@ async def get_processor(file_id: str, current_user: dict) -> Optional[DataProces
         return None
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def upload_file(
+    file: UploadFile = File(...), 
+    sheet_name: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
     if not current_user.get("is_approved") and current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Your account is pending approval by an admin.")
         
@@ -84,37 +88,57 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
     try:
         content = await file.read()
         processor = DataProcessor()
-        df = processor.load_excel(content)
         
+        # If no sheet selected, return the list of sheets
+        if not sheet_name:
+            sheets = processor.get_sheet_names(content)
+            return {"sheets": sheets}
+            
+        # If sheet selected, process the file
+        df = processor.load_excel(content, sheet_name)
+        
+        if df.empty:
+            raise HTTPException(status_code=400, detail="The selected sheet is empty or invalid.")
+
         file_id = str(uuid.uuid4())
+        
+        # 0. Storage Optimization: Auto-cleanup old files for this user
+        old_files_cursor = db.files.find({"user_id": current_user["_id"]})
+        old_files = await old_files_cursor.to_list(length=None)
+        old_file_ids = [f["_id"] for f in old_files]
+        if old_file_ids:
+            # Delete physical records
+            await db.records.delete_many({"file_id": {"$in": old_file_ids}})
+            # Delete file metadata
+            await db.files.delete_many({"_id": {"$in": old_file_ids}})
+            # Remove from local RAM cache
+            for old_id in old_file_ids:
+                data_cache.pop(old_id, None)
         
         # 1. Save metadata
         await db.files.insert_one({
             "_id": file_id,
             "filename": file.filename,
+            "sheetName": sheet_name,
             "rowCount": len(df),
             "uploadedAt": pd.Timestamp.now(),
             "user_id": current_user["_id"]
         })
         
-        # 2. Save records to MongoDB
-        # Convert df to records and add file_id reference
+        # 2. Fast vectorized preparation for MongoDB
+        df['file_id'] = file_id
+        df = df.replace({pd.NA: None, np.nan: None})
         records = df.to_dict('records')
-        for r in records:
-            r['file_id'] = file_id
-            # Clean up NaN for MongoDB (it doesn't like them)
-            for k, v in r.items():
-                if pd.isna(v): r[k] = None
         
-        # Batch insert for efficiency
+        # Batch insert into MongoDB chunks of 5000 rows
         if records:
-            await db.records.insert_many(records)
-        
-        # Cache the processor
+            chunk_size = 5000
+            for i in range(0, len(records), chunk_size):
+                chunk = records[i:i + chunk_size]
+                await db.records.insert_many(chunk)
+                
         data_cache[file_id] = processor
-        
-        # Replace NaN with None for JSON response
-        preview_data = df.head(5).replace({pd.NA: None, np.nan: None}).to_dict('records')
+        preview_data = df.drop(columns=['file_id']).head(5).to_dict('records')
         
         return jsonable_encoder({
             "fileId": file_id,
@@ -217,11 +241,35 @@ async def export_data(
     return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 @app.get("/api/filters/{file_id}")
-async def get_filters(file_id: str, current_user: dict = Depends(get_current_user)):
+async def get_filters(
+    file_id: str, 
+    shipper: Optional[List[str]] = Query(None, alias="shipper[]"),
+    origins: Optional[List[str]] = Query(None, alias="origins[]"),
+    shipper_raw: Optional[List[str]] = Query(None, alias="shipper"),
+    origins_raw: Optional[List[str]] = Query(None, alias="origins"),
+    date_range: Optional[List[str]] = Query(None, alias="dateRange[]"),
+    date_range_raw: Optional[List[str]] = Query(None, alias="dateRange"),
+    years: Optional[List[str]] = Query(None, alias="years[]"),
+    years_raw: Optional[List[str]] = Query(None, alias="years"),
+    current_user: dict = Depends(get_current_user)
+):
     processor = await get_processor(file_id, current_user)
     if not processor:
         raise HTTPException(status_code=404, detail="File session not found.")
-    return processor.get_filter_options()
+        
+    final_shipper = (shipper or []) + (shipper_raw or [])
+    final_origins = (origins or []) + (origins_raw or [])
+    final_date_range = (date_range or []) + (date_range_raw or [])
+    final_years = (years or []) + (years_raw or [])
+    
+    filters = {
+        "shipper": final_shipper if final_shipper else None,
+        "origins": final_origins if final_origins else None,
+        "date_range": final_date_range if len(final_date_range) == 2 else None,
+        "years": final_years if final_years else None
+    }
+    
+    return processor.get_filter_options(filters)
 
 if __name__ == "__main__":
     import uvicorn
