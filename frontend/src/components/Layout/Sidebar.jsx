@@ -11,6 +11,7 @@ import {
   FileUp,
   Trash2
 } from 'lucide-react';
+import logo from '../../../logo.svg';
 import { useAuth } from '../../context/AuthContext';
 
 const Sidebar = ({
@@ -45,8 +46,8 @@ const Sidebar = ({
 
       <div className="p-6 flex flex-col min-h-full relative z-10">
         <div className="flex items-center gap-4 mb-10 h-10">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-500 scale-90 ${isDark ? 'bg-primary-500 shadow-primary-500/40' : 'bg-primary-600 shadow-primary-600/30'}`}>
-            <BarChart2 className="w-7 h-7 text-white" />
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-500 scale-90 ${isDark ? 'bg-slate-900 border border-slate-700' : 'bg-white border border-slate-100'}`}>
+            <img src={logo} alt="Pharaoh Logo" className="w-8 h-8" />
           </div>
           {isExpanded && (
             <div className="animate-in fade-in slide-in-from-left duration-500">
